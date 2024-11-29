@@ -4,6 +4,8 @@ from pathlib import Path
 from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import GaussianNB
 from sklearn.metrics import f1_score, recall_score, precision_score, accuracy_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
 import numpy as np
 import pandas as pd
 import os
@@ -42,6 +44,46 @@ def load_dataset(file_path: Path):
             raise ValueError("Unsupported file format.")
     except Exception as e:
         raise ValueError(f"Error loading dataset: {e}")
+
+
+def detect_anomalies_kmeans(X, n_clusters=1, threshold_percentile=99):
+    """
+    Detect anomalies using K-means clustering.
+
+    Parameters:
+    -----------
+    X : np.ndarray
+        Feature matrix.
+    n_clusters : int, optional
+        Number of clusters for K-means.
+    threshold_percentile : int, optional
+        Percentile to use for determining anomaly threshold.
+
+    Returns:
+    --------
+    np.ndarray
+        Anomalies as a boolean mask.
+    """
+    # Standardize the data
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # Apply K-means clustering
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+    kmeans.fit(X_scaled)
+
+    # Calculate distances to cluster centers
+    distances = kmeans.transform(X_scaled)
+    labels = kmeans.labels_
+
+    # Distance of each point from its cluster centroid
+    distance_to_centroid = distances[np.arange(len(X_scaled)), labels]
+
+    # Define a threshold for anomalies
+    threshold = np.percentile(distance_to_centroid, threshold_percentile)
+    anomalies = distance_to_centroid > threshold
+
+    return anomalies
 
 
 @router.get("/supervised/{model_id}/{dataset_id}")
@@ -121,52 +163,6 @@ async def train_model(model_id: str, dataset_id: str, train_test_ratio: float = 
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import KMeans
-
-router = APIRouter()
-
-
-def detect_anomalies_kmeans(X, n_clusters=1, threshold_percentile=99):
-    """
-    Detect anomalies using K-means clustering.
-
-    Parameters:
-    -----------
-    X : np.ndarray
-        Feature matrix.
-    n_clusters : int, optional
-        Number of clusters for K-means.
-    threshold_percentile : int, optional
-        Percentile to use for determining anomaly threshold.
-
-    Returns:
-    --------
-    np.ndarray
-        Anomalies as a boolean mask.
-    """
-    # Standardize the data
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-
-    # Apply K-means clustering
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-    kmeans.fit(X_scaled)
-
-    # Calculate distances to cluster centers
-    distances = kmeans.transform(X_scaled)
-    labels = kmeans.labels_
-
-    # Distance of each point from its cluster centroid
-    distance_to_centroid = distances[np.arange(len(X_scaled)), labels]
-
-    # Define a threshold for anomalies
-    threshold = np.percentile(distance_to_centroid, threshold_percentile)
-    anomalies = distance_to_centroid > threshold
-
-    return anomalies
 
 
 @router.get("/unsupervised/{dataset_id}")
